@@ -36,8 +36,10 @@
 namespace bpo = boost::program_options;
 namespace rng = boost::range;
 namespace bfs = boost::filesystem;
+namespace alg = boost::algorithm;
 using namespace std;
 
-const string MIDAS_EXTENSION(".csv"); ///< Post's algebra network
+const string MIDAS_EXTENSION(".csv"); ///< MIDAS file format.
+const string PROPERTY_EXTENSION(".ppf"); ///< Parsybone property format.
 const size_t INF = numeric_limits<size_t>::max();
 const string VERSION("1.0.0.0");

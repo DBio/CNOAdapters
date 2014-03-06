@@ -29,6 +29,8 @@ bpo::variables_map parseProgramOptions(int argc, char ** argv) {
 	bpo::store(bpo::command_line_parser(argc, argv).options(all).positional(pos_decr).run(), result);
 	
 	if (result.count("help")) {
+		cout << "MidasToPpf filename";
+		cout << "    filename: data file in the MIDAS format.";
 		cout << visible << "\n";
 		exit(0);
 	}

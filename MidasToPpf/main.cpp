@@ -19,6 +19,7 @@ struct CompData {
 struct Experiment {
 	vector <string> stimulated;
 	vector <string> inhibited;
+	vector <string> measured;
 	vector <vector<size_t>> series;
 };
 
@@ -89,7 +90,7 @@ vector<vector<string>> getData(fstream & input_file) {
 	string line;
 	while (getline(input_file, line)) {
 		vector<string> line_data;
-		boost::split(line_data, line, boost::is_any_of(","));
+		alg::split(line_data, line, alg::is_any_of(","));
 		result.push_back(line_data);
 	}
 
@@ -97,7 +98,7 @@ vector<vector<string>> getData(fstream & input_file) {
 }
 
 // @return	IDs of columns that contain experimental setup
-vector<size_t> getColumnOfType(const vector<CompData> & components, const CompData::CompType comp_type) {
+vector<size_t> getColumnsOfType(const vector<CompData> & components, const CompData::CompType comp_type) {
 	vector<size_t> results;
 
 	for (const CompData & comp : components) 
@@ -151,6 +152,18 @@ vector<string> getAffected(const vector<CompData> & components, const map<size_t
 	return result;
 }
 
+// @return names of the components that were tempered with for this experiment
+vector<string> getMeasuredNames(const vector<CompData> & components) {
+	vector<string> result;
+
+	// Take the comonents that have the required type and see if they are active in the setup - if so, add their names
+	for (const CompData component : components)
+		if (component.comp_type != CompData::Measured)
+			result.emplace_back(component.name);
+
+	return result;
+}
+
 // @return measured data points values as integers in the series
 const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, const vector<vector<string>> & series) {
 	vector<vector<size_t>> result;
@@ -171,36 +184,97 @@ const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, 
 	return result;
 }
 
+// @return	string naming the experimental conditions (names of components that have been tampered with)
+string getExprName(const Experiment & experiment) {
+	string result = "";
+
+	for (const string & stimulus : experiment.stimulated)
+		result.append("_" + stimulus);
+	for (const string & inhibiton : experiment.inhibited)
+		result.append("_" + inhibiton);
+
+	return result;
+}
+
+// @return	string constraining the experimental conditions (as an experiment)
+string getExprConst(const Experiment & experiment) {
+	string result = "";
+
+	for (const string & stimulus : experiment.stimulated)
+		result.append("&" + stimulus + "=1");
+	for (const string & inhibiton : experiment.inhibited)
+		result.append("&" + inhibiton + "=0");
+
+	// Remove the prefixing & if there's any
+	if (!result.empty())
+		result = result.substr(1u);
+
+	return result;
+}
+
+void writeProperty(const Experiment & expr, ofstream & out) {
+	out << "<SERIES";
+	const string constraint{ getExprConst(expr) };
+	if (!constraint.empty())
+		out << "experiment=\"" << constraint << "\"" ;
+	out << ">" << endl;
+
+	for (const vector<size_t> & measurement : expr.series) {
+		out << "	<EXPR values=\"";
+		vector<string> atoms;
+		rng::transform(expr.measured, measurement, back_inserter(atoms), [](const string & name, const size_t val){
+			return name + "=" + to_string(val);
+		});
+		std::string constraint = alg::join(atoms, "&");
+
+		out << constraint << "\">" << endl;
+	}
+
+	out << "</SERIES>";
+}
+
 // The main function expects a csv file in the MIDAS format
 int main(int argc, char* argv[]) {
+	parseProgramOptions(argc, argv);
+
 	// Get input file
-	string filename(argv[1]);
-	fstream input_file(filename, ios::in);
-	if (!input_file)
-		throw invalid_argument("Wrong filename \"" + filename + "\".\n");
+	bfs::path input_path{ argv[1] };
+	if (!bfs::exists(input_path))
+		throw invalid_argument("Wrong filename \"" + input_path.string() + "\".\n");
+	fstream input_stream{ input_path.string(), ios::in };
+
+	// Read the input file
+	string names_line;
+	getline(input_stream, names_line);
+	vector<vector<string>> data = getData(input_stream);
 
 	// Read column names
-	string names_line;
-	getline(input_file, names_line);
 	vector<string> column_names;
-	boost::split(column_names, names_line, boost::is_any_of(","));
+	alg::split(column_names, names_line, boost::is_any_of(","));
 	vector<CompData> components = getComponenets(column_names);
 
 	// Obtain data
-	vector<vector<string>> data = getData(input_file);
-	vector<size_t> TR_columns = getColumnOfType(components, CompData::Inhibited);
-	rng::copy(getColumnOfType(components, CompData::Stimulated), back_inserter(TR_columns));
+	vector<size_t> TR_columns = getColumnsOfType(components, CompData::Inhibited);
+	rng::copy(getColumnsOfType(components, CompData::Stimulated), back_inserter(TR_columns));
 	set<map<size_t, string>> expr_setups = getExprSetups(TR_columns, data);
 
-	// Experiments
+	// Compute the xperiments
 	vector<Experiment> experiments;
 	for (const auto & expr_setup : expr_setups) {
 		const vector<vector<string>> series = getSeries(expr_setup, data);
 		const vector<string> inhibited = getAffected(components, expr_setup, CompData::Inhibited);
 		const vector<string> stimulated = getAffected(components, expr_setup, CompData::Stimulated);
-		const vector<size_t> DV_columns = getColumnOfType(components, CompData::Measured);
+		const vector<string> measured = getMeasuredNames(components);
+		const vector<size_t> DV_columns = getColumnsOfType(components, CompData::Measured);
 		const vector<vector<size_t>> measurements = getMeasurements(DV_columns, series);
-		experiments.emplace_back(Experiment{ inhibited, stimulated, measurements });
+		experiments.emplace_back(Experiment{ inhibited, stimulated, measured, measurements });
+	}
+
+	// Create output
+	for (const Experiment & expr : experiments) {
+		bfs::path output_path{ input_path.parent_path().string() + input_path.stem().string() + getExprName(expr) + PROPERTY_EXTENSION };
+		ofstream output_stream{ output_path.string(), ios::out };
+		writeProperty(expr, output_stream);
 	}
 
 	return 0;
