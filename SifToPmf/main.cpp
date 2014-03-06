@@ -1,3 +1,11 @@
+/*
+ * Copyright (C) 2014 - Adam Streck
+ * This file is a part of the CNOAdapters suite - tools for conversion of CellNetOptR-format files into Parsybone files
+ * This is a free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3.
+ * The software is released without any warranty. See the GNU General Public License for more details. <http://www.gnu.org/licenses/>.
+ * For affiliations see <http://www.mi.fu-berlin.de/en/math/groups/dibimath>.
+ */
+
 #include "../general/common_functions.hpp"
 
 struct Regul {

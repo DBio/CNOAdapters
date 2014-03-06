@@ -1,0 +1,26 @@
+CNOAdapters
+Copyright (c) 2014 - Adam Streck
+Discrete Biomathematics, Freie Universitat, Berlin ( http://www.mi.fu-berlin.de/en/math/groups/dibimath )
+open-source 2014, licensed as GNU GPL v3
+
+Requirements:
+	MVC November 2013, possibly GCC v4.9.0 or newer
+	Boost headers version 1.47 or newer. (http://www.boost.org/)
+
+Building:
+	MidasToPpf:
+		compile main.cpp
+		link with boost-filesystem, boost-program_options
+	SifToPmf:
+		compile main.cpp
+		
+	
+Execution:
+	SifToPmf input_file.sif output_file [true]
+		input_file.sif: a .sif model file to be converted
+		output_file: a new .pmf created in conversion
+		true: if specified, all edges are required to be observable
+		
+	MidasToPpf input_file.csv
+		input_file.csv: a MIDAS format file with binarized data
+		
