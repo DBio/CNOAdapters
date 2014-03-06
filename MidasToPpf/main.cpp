@@ -227,7 +227,7 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 		});
 		std::string constraint = alg::join(atoms, "&");
 
-		out << constraint << "\">" << endl;
+		out << constraint << "\" />" << endl;
 	}
 
 	out << "</SERIES>";
