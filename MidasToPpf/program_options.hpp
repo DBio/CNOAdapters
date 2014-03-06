@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include "common_functions.hpp"
+#include "../general/common_functions.hpp"
 
 /* Parse the program options - if help or version is required, terminate the program immediatelly. */
 bpo::variables_map parseProgramOptions(int argc, char ** argv) {
