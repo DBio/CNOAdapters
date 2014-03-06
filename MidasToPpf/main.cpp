@@ -90,7 +90,7 @@ vector<vector<string>> getData(fstream & input_file) {
 	string line;
 	while (getline(input_file, line)) {
 		vector<string> line_data;
-		alg::split(line_data, line, alg::is_any_of(","));
+		boost::split(line_data, line, boost::is_any_of(","));
 		result.push_back(line_data);
 	}
 
@@ -158,7 +158,7 @@ vector<string> getMeasuredNames(const vector<CompData> & components) {
 
 	// Take the comonents that have the required type and see if they are active in the setup - if so, add their names
 	for (const CompData component : components)
-		if (component.comp_type != CompData::Measured)
+		if (component.comp_type == CompData::Measured)
 			result.emplace_back(component.name);
 
 	return result;
@@ -180,6 +180,59 @@ const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, 
 		}
 		result.emplace_back(measurement);
 	}
+
+	return result;
+}
+
+// @return	timeseries where experiments that have repetitions have been removed.
+const vector<vector<size_t>> removeRedundant(vector<vector<size_t>> original) {
+	vector<size_t> previous{ original[0] };
+
+	// Keep only values that differe in between two steps - returns iterator to the end of the range containing these.
+	auto new_end = remove_if(begin(original) + 1, end(original), [&previous](const vector<size_t> & tested) {
+		bool result = (tested == previous);
+		previous = tested;
+		return result;
+	});
+
+	return vector<vector<size_t>>{original.begin(), new_end};
+}
+
+// @return a series where some loop has been removed if found twice
+const vector<vector<size_t>> removeCycle(vector<vector<size_t>> original) {
+	vector<vector<size_t>> result;
+
+	// This devil 1. finds a loop, 2. finds another loop, 3. if they are the same, stores the series without the second loop
+	for (auto it1 = begin(original); it1 != end(original); it1++) {
+		for (auto it2 = it1 + 1; it2 != end(original); it2++) {
+			if (*it1 != *it2)
+				continue;
+			for (auto it3 = it2; it3 != end(original); it3++) {
+				for (auto it4 = it3 + 1; it4 != end(original); it4++) {
+					if (*it3 != *it4 || (distance(it1, it2) != distance(it3, it4)))
+						continue;
+					vector<bool> equal;
+					transform(it1, it2, it3, back_inserter(equal), equal_to<vector<size_t>>());
+					if (rng::count(equal, false) == 0) {
+						result = { begin(original), it3 };
+						copy(it4, end(original), back_inserter(result));
+						return result;
+					}
+				}
+			}	
+		}
+	}
+	return original;
+}
+
+// @return	timeseries where experiments that have repetitions have been removed.
+const vector<vector<size_t>> removeRepetitive(vector<vector<size_t>> original) {
+	vector<vector<size_t>> result = original;
+
+	do {
+		original = result;
+		result = removeCycle(original);
+	} while (result != original);
 
 	return result;
 }
@@ -212,6 +265,7 @@ string getExprConst(const Experiment & experiment) {
 	return result;
 }
 
+// Produce the output
 void writeProperty(const Experiment & expr, ofstream & out) {
 	out << "<SERIES";
 	const string constraint{ getExprConst(expr) };
@@ -219,6 +273,7 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 		out << "experiment=\"" << constraint << "\"" ;
 	out << ">" << endl;
 
+	// Print the epxressions
 	for (const vector<size_t> & measurement : expr.series) {
 		out << "	<EXPR values=\"";
 		vector<string> atoms;
@@ -226,12 +281,18 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 			return name + "=" + to_string(val);
 		});
 		std::string constraint = alg::join(atoms, "&");
+		out << constraint << "\" ";
 
-		out << constraint << "\" />" << endl;
+		// Set stable if there is only a single measurement
+		if (expr.series.size() == 1)
+			out << "stable=\"1\" ";
+
+		out << "/>" << endl;
 	}
 
 	out << "</SERIES>";
 }
+
 
 // The main function expects a csv file in the MIDAS format
 int main(int argc, char* argv[]) {
@@ -267,7 +328,9 @@ int main(int argc, char* argv[]) {
 		const vector<string> measured = getMeasuredNames(components);
 		const vector<size_t> DV_columns = getColumnsOfType(components, CompData::Measured);
 		const vector<vector<size_t>> measurements = getMeasurements(DV_columns, series);
-		experiments.emplace_back(Experiment{ inhibited, stimulated, measured, measurements });
+		const vector<vector<size_t>> measurements2 = removeRedundant(move(measurements));
+		const vector<vector<size_t>> measurements3 = removeRepetitive(move(measurements2));
+		experiments.emplace_back(Experiment{ stimulated, inhibited, measured, measurements3 });
 	}
 
 	// Create output
