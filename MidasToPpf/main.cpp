@@ -26,10 +26,10 @@ struct CompData {
 
 // Holds data about a single experiment - the experimental set-up and the time series measurements
 struct Experiment {
-	vector <string> stimulated;
-	vector <string> inhibited;
-	vector <string> measured;
-	vector <vector<size_t>> series;
+	map <string, size_t> stimulated;
+	map <string, size_t> inhibited;
+	vector<string> measured;
+	vector<vector<size_t>> series;
 };
 
 // @return	the index the column that holds times
@@ -147,15 +147,15 @@ vector<vector<string>> getSeries(const map<size_t, string> & expr_setup, const v
 }
 
 // @return names of the components that were tempered with for this experiment
-vector<string> getAffected(const vector<CompData> & components, const map<size_t, string> & expr_setup, const CompData::CompType comp_type) {
-	vector<string> result;
+map<string, size_t> getAffected(const vector<CompData> & components, const map<size_t, string> & expr_setup, const CompData::CompType comp_type) {
+	map<string, size_t> result;
 	
 	// Take the comonents that have the required type and see if they are active in the setup - if so, add their names
 	for (const CompData component : components) {
 		if (component.comp_type != comp_type)
 			continue;
-		if (expr_setup.find(component.column_no)->second == "1")
-			result.push_back(component.name);
+		size_t val = stoul(expr_setup.find(component.column_no)->second);
+		result.insert(make_pair(component.name, val));
 	}
 
 	return result;
@@ -184,7 +184,7 @@ const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, 
 				measurement.emplace_back(stoul(timepoint[column_no]));
 			}
 			catch (...) {
-				throw invalid_argument("Non-integral value of a measurement (measurements must be first discretized).");
+				measurement.emplace_back(INF);
 			}
 		}
 		result.emplace_back(measurement);
@@ -250,10 +250,14 @@ const vector<vector<size_t>> removeRepetitive(vector<vector<size_t>> original) {
 string getExprName(const Experiment & experiment) {
 	string result = "";
 
-	for (const string & stimulus : experiment.stimulated)
-		result.append("_" + stimulus);
-	for (const string & inhibiton : experiment.inhibited)
-		result.append("_" + inhibiton);
+	auto addSetup = [&result](const map<string, size_t> conditions) {
+		for (const auto & condition : conditions)
+			if (condition.second != 0)
+				result.append("_" + condition.first); 
+	};
+	
+	addSetup(experiment.stimulated);
+	addSetup(experiment.inhibited);
 
 	return result;
 }
@@ -262,10 +266,12 @@ string getExprName(const Experiment & experiment) {
 string getExprConst(const Experiment & experiment) {
 	string result = "";
 
-	for (const string & stimulus : experiment.stimulated)
-		result.append("&" + stimulus + "=1");
-	for (const string & inhibiton : experiment.inhibited)
-		result.append("&" + inhibiton + "=0");
+	for (const auto & stimulus : experiment.stimulated)
+		result.append("&" + stimulus.first + "=" + to_string(stimulus.second));
+
+	for (const auto & inhibiton : experiment.inhibited)
+		if (inhibiton.second != 0)
+			result.append("&" + inhibiton.first + "=0");
 
 	// Remove the prefixing & if there's any
 	if (!result.empty())
@@ -287,8 +293,12 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 		out << "	<EXPR values=\"";
 		vector<string> atoms;
 		rng::transform(expr.measured, measurement, back_inserter(atoms), [](const string & name, const size_t val){
-			return name + "=" + to_string(val);
+			if (val == 0 || val == 1)
+				return name + "=" + to_string(val);
+			else
+				return string{ "" };
 		});
+		atoms.resize(distance(atoms.begin(), rng::remove_if(atoms, [](const string & atom) {return atom.empty(); })));
 		std::string constraint = alg::join(atoms, "&");
 		out << constraint << "\" ";
 
@@ -332,8 +342,8 @@ int main(int argc, char* argv[]) {
 	vector<Experiment> experiments;
 	for (const auto & expr_setup : expr_setups) {
 		const vector<vector<string>> series = getSeries(expr_setup, data);
-		const vector<string> inhibited = getAffected(components, expr_setup, CompData::Inhibited);
-		const vector<string> stimulated = getAffected(components, expr_setup, CompData::Stimulated);
+		const map<string, size_t> inhibited = getAffected(components, expr_setup, CompData::Inhibited);
+		const map<string, size_t> stimulated = getAffected(components, expr_setup, CompData::Stimulated);
 		const vector<string> measured = getMeasuredNames(components);
 		const vector<size_t> DV_columns = getColumnsOfType(components, CompData::Measured);
 		const vector<vector<size_t>> measurements = getMeasurements(DV_columns, series);
