@@ -8,18 +8,26 @@
 
 #include "../general/common_functions.hpp"
 
+#include "program_options.hpp"
+
 struct Regul {
 	string source;
 	string target;
 	string label;
 };
 
-void outputModel(const vector<Regul> & regulations, const string & filename) {
-	string last_specie;
+void outputModel(const vector<Regul> & regulations, const set<string> & inputs, const string & filename) {
 	fstream output(filename, ios::out);
 	output << "<NETWORK>" << endl;
+
+	for (const string & input : inputs) {
+		output << "<INPUT name=\"" << input << "\" />";
+	}
+
+	string last_specie;
 	for (const Regul & regul : regulations) {
 		bool new_specie = (regul.target != last_specie);
+		// If there was a predecessor, finish him
 		if (new_specie && !last_specie.empty())
 			output << "    </SPECIE>" << endl;
 		if (new_specie)
@@ -32,25 +40,25 @@ void outputModel(const vector<Regul> & regulations, const string & filename) {
 		last_specie = regul.target;
 	}
 	
+	// Finish the last
 	output << "    </SPECIE>" << endl;	
 	output << "</NETWORK>" << endl;
 }
 
 int main(int argc, char ** argv) {
-	bool observable = false;
-	if (argc == 4) {
-		string obs_param{argv[3]};
-		observable = obs_param == "true"  || obs_param == "1";
-	}
-	else if (argc != 3)
-		throw invalid_argument("Wrong number of parameters.");
+	bpo::variables_map program_options = parseProgramOptions(argc, argv);
+	bfs::path sif_file(program_options["SIF"].as<string>());
+	bfs::path pmf_file(sif_file.parent_path().string() + sif_file.stem().string() + MODEL_EXTENSION);
+
+	// Hardcode setup
+	bool observable = true;
 	string pos_cons = observable ? "ActivatingOnly" : "NotInhibiting";
 	string neg_cons = observable ? "InhibitingOnly" : "NotActivating";
 	
 	vector<Regul> regulations;
 	
 	// Read input
-	fstream input_file(argv[1], ios::in);
+	fstream input_file(sif_file.string(), ios::in);
 	Regul temporary;
 	string label;
 	set<string> sources, targets;
@@ -64,9 +72,6 @@ int main(int argc, char ** argv) {
 	// Add self-loops on inputs
 	set<string> inputs;
 	set_difference(begin(sources), end(sources), begin(targets), end(targets), inserter(inputs, inputs.begin()));
-	for (const string & input : inputs) {
-		regulations.emplace_back(Regul({input, input, "ActivatingOnly"}));
-	}
 	
 	// Sort by target
 	sort(begin(regulations), end(regulations), [](const Regul & A, const Regul & B) {
@@ -74,7 +79,7 @@ int main(int argc, char ** argv) {
 	});
 	
 	// output to the file
-	outputModel(regulations, argv[2]);
+	outputModel(regulations, inputs, pmf_file.string());
 	
 	return 0;
 }

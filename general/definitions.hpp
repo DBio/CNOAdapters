@@ -40,6 +40,8 @@ namespace alg = boost::algorithm;
 using namespace std;
 
 const string MIDAS_EXTENSION(".csv"); ///< MIDAS file format.
+const string SIF_EXTENSION(".sif"); ///< SIF graph file format.
 const string PROPERTY_EXTENSION(".ppf"); ///< Parsybone property format.
+const string MODEL_EXTENSION(".pmf"); ///< Parsybone model format.
 const size_t INF = numeric_limits<size_t>::max();
-const string VERSION("1.0.0.0");
+const string VERSION("1.0.2.0");

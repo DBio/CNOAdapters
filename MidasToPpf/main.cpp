@@ -315,10 +315,10 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 
 // The main function expects a csv file in the MIDAS format
 int main(int argc, char* argv[]) {
-	parseProgramOptions(argc, argv);
+	bpo::variables_map po = parseProgramOptions(argc, argv);
 
 	// Get input file
-	bfs::path input_path{ argv[1] };
+	bfs::path input_path{ po["MIDAS"].as<string>() };
 	if (!bfs::exists(input_path))
 		throw invalid_argument("Wrong filename \"" + input_path.string() + "\".\n");
 	fstream input_stream{ input_path.string(), ios::in };
