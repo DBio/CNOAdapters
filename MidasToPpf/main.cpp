@@ -9,6 +9,8 @@
 #include "program_options.hpp"
 #include "../general/common_functions.hpp"
 
+const double THRESHOLD = 0.5;
+
 const regex CELL_LINE{ "TR:.*:CellLine" };
 const regex MEASUER_T{ "DA:.*" };
 const regex DATA_VAL{ "DV:.*" };
@@ -161,7 +163,7 @@ map<string, size_t> getAffected(const vector<CompData> & components, const map<s
 	return result;
 }
 
-// @return names of the components that were tempered with for this experiment
+// @return names of the components that were measured
 vector<string> getMeasuredNames(const vector<CompData> & components) {
 	vector<string> result;
 
@@ -174,17 +176,22 @@ vector<string> getMeasuredNames(const vector<CompData> & components) {
 }
 
 // @return measured data points values as integers in the series
-const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, const vector<vector<string>> & series) {
+const vector<vector<size_t>> getMeasurements(const vector<size_t> & DV_columns, const vector<vector<string>> & series, double error) {
 	vector<vector<size_t>> result;
 
 	for (const vector<string> & timepoint : series) {
 		vector<size_t> measurement;
 		for (const size_t column_no : DV_columns) {
+			double val = numeric_limits<double>::infinity();
 			try {
-				measurement.emplace_back(stoul(timepoint[column_no]));
+				val = stod(timepoint[column_no]);
 			}
-			catch (...) {
+			catch (...) { }
+			if ((val == numeric_limits<double>::infinity()) || (abs(THRESHOLD - val) < error)) {
 				measurement.emplace_back(INF);
+			}
+			else {
+				measurement.emplace_back(static_cast<size_t>(round(val)));
 			}
 		}
 		result.emplace_back(measurement);
@@ -315,48 +322,53 @@ void writeProperty(const Experiment & expr, ofstream & out) {
 
 // The main function expects a csv file in the MIDAS format
 int main(int argc, char* argv[]) {
-	bpo::variables_map po = parseProgramOptions(argc, argv);
+	try{
+		bpo::variables_map po = parseProgramOptions(argc, argv);
 
-	// Get input file
-	bfs::path input_path{ po["MIDAS"].as<string>() };
-	if (!bfs::exists(input_path))
-		throw invalid_argument("Wrong filename \"" + input_path.string() + "\".\n");
-	fstream input_stream{ input_path.string(), ios::in };
+		// Get input file
+		bfs::path input_path{ po["MIDAS"].as<string>() };
+		if (!bfs::exists(input_path))
+			throw invalid_argument("Wrong filename \"" + input_path.string() + "\".\n");
+		fstream input_stream{ input_path.string(), ios::in };
 
-	// Read the input file
-	string names_line;
-	getline(input_stream, names_line);
-	vector<vector<string>> data = getData(input_stream);
+		// Read the input file
+		string names_line;
+		getline(input_stream, names_line);
+		vector<vector<string>> data = getData(input_stream);
 
-	// Read column names
-	vector<string> column_names;
-	alg::split(column_names, names_line, boost::is_any_of(","));
-	vector<CompData> components = getComponenets(column_names);
+		// Read column names
+		vector<string> column_names;
+		alg::split(column_names, names_line, boost::is_any_of(","));
+		vector<CompData> components = getComponenets(column_names);
 
-	// Obtain data
-	vector<size_t> TR_columns = getColumnsOfType(components, CompData::Inhibited);
-	rng::copy(getColumnsOfType(components, CompData::Stimulated), back_inserter(TR_columns));
-	set<map<size_t, string>> expr_setups = getExprSetups(TR_columns, data);
+		// Obtain data
+		vector<size_t> TR_columns = getColumnsOfType(components, CompData::Inhibited);
+		rng::copy(getColumnsOfType(components, CompData::Stimulated), back_inserter(TR_columns));
+		set<map<size_t, string>> expr_setups = getExprSetups(TR_columns, data);
 
-	// Compute the xperiments
-	vector<Experiment> experiments;
-	for (const auto & expr_setup : expr_setups) {
-		const vector<vector<string>> series = getSeries(expr_setup, data);
-		const map<string, size_t> inhibited = getAffected(components, expr_setup, CompData::Inhibited);
-		const map<string, size_t> stimulated = getAffected(components, expr_setup, CompData::Stimulated);
-		const vector<string> measured = getMeasuredNames(components);
-		const vector<size_t> DV_columns = getColumnsOfType(components, CompData::Measured);
-		const vector<vector<size_t>> measurements = getMeasurements(DV_columns, series);
-		const vector<vector<size_t>> measurements2 = removeRedundant(move(measurements));
-		const vector<vector<size_t>> measurements3 = removeRepetitive(move(measurements2));
-		experiments.emplace_back(Experiment{ stimulated, inhibited, measured, measurements3 });
+		// Compute the xperiments
+		vector<Experiment> experiments;
+		for (const auto & expr_setup : expr_setups) {
+			const vector<vector<string>> series = getSeries(expr_setup, data);
+			const map<string, size_t> inhibited = getAffected(components, expr_setup, CompData::Inhibited);
+			const map<string, size_t> stimulated = getAffected(components, expr_setup, CompData::Stimulated);
+			const vector<string> measured = getMeasuredNames(components);
+			const vector<size_t> DV_columns = getColumnsOfType(components, CompData::Measured);
+			const vector<vector<size_t>> measurements = getMeasurements(DV_columns, series, po["error"].as<double>());
+			const vector<vector<size_t>> measurements2 = removeRedundant(move(measurements));
+			const vector<vector<size_t>> measurements3 = removeRepetitive(move(measurements2));
+			experiments.emplace_back(Experiment{ stimulated, inhibited, measured, measurements3 });
+		}
+
+		// Create output
+		for (const Experiment & expr : experiments) {
+			bfs::path output_path{ input_path.parent_path().string() + input_path.stem().string() + getExprName(expr) + PROPERTY_EXTENSION };
+			ofstream output_stream{ output_path.string(), ios::out };
+			writeProperty(expr, output_stream);
+		}
 	}
-
-	// Create output
-	for (const Experiment & expr : experiments) {
-		bfs::path output_path{ input_path.parent_path().string() + input_path.stem().string() + getExprName(expr) + PROPERTY_EXTENSION };
-		ofstream output_stream{ output_path.string(), ios::out };
-		writeProperty(expr, output_stream);
+	catch (exception & e) {
+		cerr << "An exception thrown: " << e.what() << endl;
 	}
 
 	return 0;

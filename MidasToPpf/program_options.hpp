@@ -18,6 +18,8 @@ bpo::variables_map parseProgramOptions(int argc, char ** argv) {
 	visible.add_options()
 		("help,h", "display help")
 		("version,v", "display version")
+		("error", bpo::value<double>()->default_value(0.1), 
+		"for floating point input, this value denotes how far a readout must be from threshold to be binarized (otherwise is ommited")
 		;
 	bpo::options_description invisible;
 	invisible.add_options()

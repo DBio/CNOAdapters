@@ -22,9 +22,9 @@
 #include <boost/range/algorithm.hpp>
 #include <boost/range/counting_range.hpp>
 #include <boost/program_options.hpp>
-#include <boost/log/trivial.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 
 /*
  * Copyright (C) 2014 - Adam Streck
@@ -45,3 +45,9 @@ const string PROPERTY_EXTENSION(".ppf"); ///< Parsybone property format.
 const string MODEL_EXTENSION(".pmf"); ///< Parsybone model format.
 const size_t INF = numeric_limits<size_t>::max();
 const string VERSION("1.0.2.0");
+
+#if (_MSC_VER != 1800)
+#define stoul boost::lexical_cast<unsigned long, string>
+#define stod boost::lexical_cast<double, string>
+#define to_string boost::lexical_cast<string>
+#endif

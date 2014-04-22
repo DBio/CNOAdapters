@@ -9,18 +9,18 @@ Requirements:
 
 Building:
 	MidasToPpf:
-		compile main.cpp
-		link with boost-filesystem, boost-program_options
+		compile MidasToPpf/main.cpp
+		link with boost_filesystem, boost_program_options, boost_system
 	SifToPmf:
-		compile main.cpp
+		compile SifToPmf/main.cpp
+		link with boost_filesystem, boost_program_options, boost_system
 		
 	
 Execution:
 	SifToPmf input_file.sif output_file [true]
-		input_file.sif: a .sif model file to be converted
-		output_file: a new .pmf created in conversion
-		true: if specified, all edges are required to be observable
+		input_file.sif: a .sif model file to be converted, all edges are constrained as observable and monotonic
 		
 	MidasToPpf input_file.csv
-		input_file.csv: a MIDAS format file with binarized data
+		input_file.csv: a MIDAS format file with normalized or binarized data
+						in the case the data are normalized, 0.5 is set as the thresholds
 		
